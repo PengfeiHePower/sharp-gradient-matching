@@ -1,4 +1,5 @@
 """Setup constants, ymmv."""
+NORMALIZE =True
 
 PIN_MEMORY = True
 NON_BLOCKING = True

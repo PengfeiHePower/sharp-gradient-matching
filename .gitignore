@@ -152,3 +152,15 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+
+
+cf10/
+cf100/
+log/
+multi-4/
+multi-8/
+multi-4-cf100/
+multi-8-cf100/
+poisons/
+tables/
+

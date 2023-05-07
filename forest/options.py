@@ -106,5 +106,18 @@ def options():
     # Distributed Computations
     parser.add_argument("--local_rank", default=None, type=int, help='Distributed rank. This is an INTERNAL ARGUMENT! '
                                                                      'Only the launch utility should set this argument!')
+    
+    parser.add_argument('--sharpsigma', default=0.05, type=float, help='variance of sharpness')
+    parser.add_argument('--savename', default='p5', type=str, help='data save name')
+    
+    # Mixing defense
+    parser.add_argument('--mixing_method', default=None, type=str, help='Which mixing data augmentation to use.')
+    parser.add_argument('--mixing_disable_correction', action='store_false', help='Disable correcting the loss term appropriately after data mixing.')
+    parser.add_argument('--mixing_strength', default=None, type=float, help='How strong is the mixing.')
+    parser.add_argument('--disable_adaptive_attack', action='store_false', help='Do not use a defended model as input for poisoning. [Defend only in poison validation]')
+    parser.add_argument('--defend_features_only', action='store_true', help='Only defend during the initial pretraining before poisoning. [Defend only in pretraining]')
+    
+
+
 
     return parser

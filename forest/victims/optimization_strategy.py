@@ -16,8 +16,20 @@ def training_strategy(model_name, args):
         defs = BasicStrategy(model_name, args)
     elif args.optimization == 'memory-saving':
         defs = MemoryStrategy(model_name, args)
+    elif args.optimization == 'standard':
+        defs = StandardStrategy(model_name, args)
+    elif args.optimization == 'standard2':
+        defs = StandardStrategy2(model_name, args)
     else:
         defs = FastStrategy(model_name, args)
+    # Modify data mixing arguments:
+    if args.mixing_method is not None:
+        defs.mixing_method['type'] = args.mixing_method
+
+    defs.mixing_method['correction'] = args.mixing_disable_correction
+
+    if args.mixing_strength is not None:
+        defs.mixing_method['strength'] = args.mixing_strength
     return defs
 
 
@@ -34,6 +46,7 @@ class Strategy:
     augmentations : bool
     privacy : dict
     validate : int
+    mixing_method : dict#mody-aug
 
     def __init__(self, model_name, args):
         """Defaulted parameters. Apply overwrites from args."""
@@ -62,6 +75,47 @@ class ConservativeStrategy(Strategy):
         self.privacy = dict(clip=None, noise=None)
         self.adversarial_steps = 0
         self.validate = 10
+        self.mixing_method=dict(type='', strength=0.0, correction=False)
+
+        super().__init__(model_name, args)
+        
+@dataclass
+class StandardStrategy(Strategy):
+    """Standard Strategy."""
+
+    def __init__(self, model_name, args):
+        """Initialize training hyperparameters."""
+        self.lr = 0.1
+        self.epochs = 200
+        self.batch_size = 128
+        self.optimizer = 'SGD'
+        self.scheduler = 'linear'
+        self.weight_decay = 5e-4
+        self.augmentations = True
+        self.privacy = dict(clip=None, noise=None)
+        self.adversarial_steps = 0
+        self.validate = 10
+        self.mixing_method=dict(type='', strength=0.0, correction=False)
+
+        super().__init__(model_name, args)
+
+@dataclass
+class StandardStrategy2(Strategy):
+    """Standard Strategy."""
+
+    def __init__(self, model_name, args):
+        """Initialize training hyperparameters."""
+        self.lr = 0.1
+        self.epochs = 80
+        self.batch_size = 128
+        self.optimizer = 'SGD'
+        self.scheduler = 'linear'
+        self.weight_decay = 5e-4
+        self.augmentations = True
+        self.privacy = dict(clip=None, noise=None)
+        self.adversarial_steps = 0
+        self.validate = 10
+        self.mixing_method=dict(type='', strength=0.0, correction=False)
 
         super().__init__(model_name, args)
 
@@ -82,6 +136,7 @@ class MemoryStrategy(Strategy):
         self.privacy = dict(clip=None, noise=None)
         self.adversarial_steps = 0
         self.validate = 10
+        self.mixing_method=dict(type='', strength=0.0, correction=False)
 
         super().__init__(model_name, args)
 
@@ -110,6 +165,7 @@ class PrivacyStrategy(Strategy):
         self.privacy = dict(clip=clip, noise=noise)
         self.adversarial_steps = 0
         self.validate = 10
+        self.mixing_method=dict(type='', strength=0.0, correction=False)
         super().__init__(model_name, args)
 
 @dataclass
@@ -131,6 +187,7 @@ class BasicStrategy(Strategy):
         self.privacy = dict(clip=None, noise=None)
         self.adversarial_steps = 0
         self.validate = 10
+        self.mixing_method=dict(type='', strength=0.0, correction=False)
         super().__init__(model_name, args)
 
 
@@ -150,6 +207,7 @@ class AdversarialStrategy(Strategy):
         self.privacy = dict(clip=None, noise=None)
         self.adversarial_steps = 4
         self.validate = 10
+        self.mixing_method=dict(type='', strength=0.0, correction=False)
         super().__init__(model_name, args)
 
 @dataclass
@@ -176,4 +234,5 @@ class FastStrategy(Strategy):
         self.privacy = dict(clip=None, noise=None)
         self.adversarial_steps = 0
         self.validate = 20
+        self.mixing_method=dict(type='', strength=0.0, correction=False)
         super().__init__(model_name, args)

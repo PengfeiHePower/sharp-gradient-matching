@@ -21,7 +21,9 @@ if __name__ == "__main__":
     setup = forest.utils.system_startup(args)
 
     model = forest.Victim(args, setup=setup)
-    data = forest.Kettle(args, model.defs.batch_size, model.defs.augmentations, setup=setup)
+    print('model def:', model.defs)
+    # data = forest.Kettle(args, model.defs.batch_size, model.defs.augmentations, setup=setup)
+    data = forest.Kettle(args, model.defs.batch_size, model.defs.augmentations, model.defs.mixing_method, setup=setup)#mody-aug
     witch = forest.Witch(args, setup=setup)
 
     start_time = time.time()
@@ -67,7 +69,7 @@ if __name__ == "__main__":
 
     # Export
     if args.save is not None:
-        data.export_poison(poison_delta, path=args.poison_path, mode=args.save)
+        data.export_poison(poison_delta, savename = args.savename, path=args.poison_path, mode=args.save)
 
     print(datetime.datetime.now().strftime("%A, %d. %B %Y %I:%M%p"))
     print('---------------------------------------------------')

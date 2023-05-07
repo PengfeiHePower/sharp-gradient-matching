@@ -11,6 +11,31 @@ torch.backends.cudnn.benchmark = BENCHMARK
 
 from .victim_base import _VictimBase
 
+import copy
+
+
+def list_plus(list1, list2):# two list must have same structure
+    list_total = copy.deepcopy(list1)
+    for i in range(len(list_total)):
+        list_total[i] += list2[i]
+    return list_total
+    
+def list_multiply(list1, a):
+    list_total = copy.deepcopy(list1)
+    for i in range (len(list_total)):
+        list_total[i] *= a
+    return list_total
+
+def add_gaussian(model, sigma):
+    device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    with torch.no_grad():
+        for _, param in model.named_parameters():
+            param_size = param.size()
+            mean_param = torch.zeros(param_size, device=device)
+            std_param = sigma * torch.ones(param_size, device=device)
+            gaussian_noise = torch.normal(mean_param, std_param)
+            param.add_(gaussian_noise)
+
 
 class _VictimEnsemble(_VictimBase):
     """Implement model-specific code and behavior for multiple models on a single GPU.
@@ -167,6 +192,67 @@ class _VictimEnsemble(_VictimBase):
                     grad_norm += grad.detach().pow(2).sum()
                 norm_list.append(grad_norm.sqrt())
         return grad_list, norm_list
+    
+    def sharp_grad(self, external_criterion, images, labels, sigma):
+        import copy
+        device = 'cuda' if torch.cuda.is_available() else 'cpu'
+        inputs, targets = images.to(device), labels.to(device)
+        grad_list, norm_list = [], []
+        for model, criterion in zip(self.models, self.criterions):
+            with GPUContext(self.setup, model) as model:
+                net_clone = copy.deepcopy(model)
+                add_gaussian(net_clone, sigma)
+                output_p = net_clone(inputs)
+                loss_s = external_criterion(output_p, targets)
+                loss_grad = torch.autograd.grad(loss_s, net_clone.parameters(), only_inputs=True)
+                loss_grad_list = list(loss_grad)
+                for _ in range(19):
+                    net_clone = copy.deepcopy(self.model)
+                    add_gaussian(net_clone, sigma)
+                    output_p = net_clone(inputs)
+                    loss_s = external_criterion(output_p, targets)
+                    grad = torch.autograd.grad(loss_s, net_clone.parameters(), only_inputs=True)
+                    loss_grad_list = list_plus(loss_grad_list, list(grad))
+                loss_grad_list = list_multiply(loss_grad_list, 1/20)
+                total_grad = tuple(loss_grad_list)
+                grad_list.append(total_grad)
+                grad_norm = 0
+                for grad in total_grad:
+                    grad_norm += grad.detach().pow(2).sum()
+                norm_list.append(grad_norm.sqrt())
+        return grad_list, norm_list
+    
+    def worst_sharp_grad(self, external_criterion, images, labels, sigma):
+        import copy
+        device = 'cuda' if torch.cuda.is_available() else 'cpu'
+        inputs, targets = images.to(device), labels.to(device)
+        grad_list, norm_list = [], []
+        for model, criterion in zip(self.models, self.criterions):
+            with GPUContext(self.setup, model) as model:
+                output = model(inputs)
+                loss = external_criterion(output, targets)
+                grad_ = torch.autograd.grad(loss, model.parameters(), only_inputs=True)
+                grad_n = 0
+                for grad in grad_:
+                    grad_n += grad.detach().pow(2).sum()
+                grad_n = grad_n.sqrt()
+                
+                scale = sigma / (grad_n + 1e-12)
+                net_clone = copy.deepcopy(model)
+                for name, p in net_clone.named_parameters():
+                    if p.grad is None: continue
+                    e_w = (1.0) * p.grad * scale.to(p)
+                    p.add_(e_w)
+                output_p = net_clone(inputs)
+                loss_s = external_criterion(output_p, targets)
+                gradients = torch.autograd.grad(loss_s, net_clone.parameters(), only_inputs=True)
+                grad_list.append(gradients)
+                grad_norm = 0
+                for grad in gradients:
+                    grad_norm += grad.detach().pow(2).sum()
+                norm_list.append(grad_norm.sqrt())
+        return grad_list, norm_list
+                
 
     def compute(self, function, *args):
         """Compute function on all models.

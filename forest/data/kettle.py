@@ -14,9 +14,10 @@ import PIL
 from .datasets import construct_datasets, Subset
 from .cached_dataset import CachedDataset
 
-from .diff_data_augmentation import RandomTransform
+from .diff_data_augmentation import RandomTransform, RandomGridShift, RandomTransformFixed, FlipLR
+from .mixing_data_augmentations import Mixup, Cutout, Cutmix, Maxup #mody-aug
 
-from ..consts import PIN_MEMORY, BENCHMARK, DISTRIBUTED_BACKEND, SHARING_STRATEGY, MAX_THREADING
+from ..consts import PIN_MEMORY, NORMALIZE, BENCHMARK, DISTRIBUTED_BACKEND, SHARING_STRATEGY, MAX_THREADING
 from ..utils import set_random_seed
 torch.backends.cudnn.benchmark = BENCHMARK
 torch.multiprocessing.set_sharing_strategy(SHARING_STRATEGY)
@@ -43,12 +44,16 @@ class Kettle():
 
     """
 
-    def __init__(self, args, batch_size, augmentations, setup=dict(device=torch.device('cpu'), dtype=torch.float)):
+    # def __init__(self, args, batch_size, augmentations, setup=dict(device=torch.device('cpu'), dtype=torch.float)): #mody-aug
+    def __init__(self, args, batch_size, augmentations, mixing_method=dict(type=None, strength=0.0), setup=dict(device=torch.device('cpu'), dtype=torch.float)):
         """Initialize with given specs..."""
         self.args, self.setup = args, setup
         self.batch_size = batch_size
         self.augmentations = augmentations
-        self.trainset, self.validset = self.prepare_data(normalize=True)
+        self.mixing_method = mixing_method#mody-aug
+        # self.trainset, self.validset = self.prepare_data(normalize=True)
+        self.trainset, self.validset = construct_datasets(self.args.dataset, self.args.data_path, NORMALIZE)
+        self.prepare_diff_data_augmentations(normalize=NORMALIZE)
         num_workers = self.get_num_workers()
 
         if self.args.lmdb_path is not None:
@@ -167,6 +172,80 @@ class Kettle():
                 self.augment = RandomTransform(**params, mode='bilinear')
             else:
                 raise ValueError(f'Invalid diff. transformation given: {self.augmentations}.')
+
+        return trainset, validset
+    
+    def prepare_diff_data_augmentations(self, normalize=True):
+        """Load differentiable data augmentations separately from usual torchvision.transforms."""
+        trainset, validset = construct_datasets(self.args.dataset, self.args.data_path, normalize)
+
+
+        # Prepare data mean and std for later:
+        if normalize:
+            self.dm = torch.tensor(trainset.data_mean)[None, :, None, None].to(**self.setup)
+            self.ds = torch.tensor(trainset.data_std)[None, :, None, None].to(**self.setup)
+        else:
+            self.dm = torch.tensor(trainset.data_mean)[None, :, None, None].to(**self.setup).zero_()
+            self.ds = torch.tensor(trainset.data_std)[None, :, None, None].to(**self.setup).fill_(1.0)
+
+
+        # Train augmentations are handled separately as they possibly have to be backpropagated
+        if self.augmentations is not None or self.args.paugment:
+            if 'CIFAR' in self.args.dataset:
+                params = dict(source_size=32, target_size=32, shift=8, fliplr=True)
+            elif 'MNIST' in self.args.dataset:
+                params = dict(source_size=28, sourcetarget_size_size=28, shift=4, fliplr=True)
+            elif 'TinyImageNet' in self.args.dataset:
+                params = dict(source_size=64, target_size=64, shift=64 // 4, fliplr=True)
+            elif 'ImageNet' in self.args.dataset:
+                params = dict(source_size=224, target_size=224, shift=224 // 4, fliplr=True)
+
+            if self.augmentations == 'default':
+                self.augment = RandomTransform(**params, mode='bilinear')
+            elif self.augmentations == 'default-align':
+                self.augment = RandomTransform(**params, mode='bilinear', align=False)
+            elif self.augmentations == 'default-nn':
+                self.augment = RandomTransform(**params, mode='nearest')
+            elif self.augmentations == 'default-nn-align':
+                self.augment = RandomTransform(**params, mode='nearest', align=False)
+            elif self.augmentations == 'grid-shift':
+                self.augment = RandomGridShift(**params)
+            elif self.augmentations == 'LR':
+                self.augment = FlipLR(**params)
+            elif self.augmentations == 'affine-trafo':
+                self.augment = RandomTransformFixed(**params, mode='bilinear')
+            elif self.augmentations == 'affine-trafo-nn':
+                self.augment = RandomTransformFixed(**params, mode='nearest')
+            elif self.augmentations == 'affine-trafo-align':
+                self.augment = RandomTransformFixed(**params, mode='bilinear', align=False)
+            elif self.augmentations == 'affine-trafo-nn-align':
+                self.augment = RandomTransformFixed(**params, mode='nearest', align=False)
+            elif self.augmentations == 'affine-trafo-no-flip':
+                params['fliplr'] = False
+                self.augment = RandomTransformFixed(**params, mode='bilinear')
+            elif self.augmentations == 'affine-trafo-nn-no-flip':
+                params['fliplr'] = False
+                self.augment = RandomTransformFixed(**params, mode='nearest')
+            elif not self.augmentations:
+                print('Data augmentations are disabled.')
+                self.augment = RandomTransform(**params, mode='bilinear')
+            else:
+                raise ValueError(f'Invalid diff. transformation given: {self.augmentations}.')
+
+            if self.mixing_method['type'] != '':
+                if 'mixup' in self.mixing_method['type']:
+                    nway = int(self.mixing_method['type'][0]) if 'way' in self.mixing_method['type'] else 2
+                    self.mixer = Mixup(nway=nway, alpha=self.mixing_method['strength'])
+                elif 'cutmix' in self.mixing_method['type']:
+                    self.mixer = Cutmix(alpha=self.mixing_method['strength'])
+                elif 'cutout' in self.mixing_method['type']:
+                    self.mixer = Cutout(alpha=self.mixing_method['strength'])
+                else:
+                    raise ValueError(f'Invalid mixing data augmentation {self.mixing_method["type"]} given.')
+
+                if 'maxup' in self.mixing_method['type']:
+                    self.mixer = Maxup(self.mixer, ntrials=4)
+
 
         return trainset, validset
 
@@ -456,7 +535,7 @@ class Kettle():
 
     """ EXPORT METHODS """
 
-    def export_poison(self, poison_delta, path=None, mode='automl'):
+    def export_poison(self, poison_delta, savename, path=None, mode='automl'):
         """Export poisons in either packed mode (just ids and raw data) or in full export mode, exporting all images.
 
         In full export mode, export data into folder structure that can be read by a torchvision.datasets.ImageFolder
@@ -562,8 +641,9 @@ class Kettle():
                 training_data[idx] = np.asarray(_torch_to_PIL(input))
                 labels[idx] = label
 
-            np.save(os.path.join(path, 'poisoned_training_data.npy'), training_data)
-            np.save(os.path.join(path, 'poisoned_training_labels.npy'), labels)
+            np.save(os.path.join(path, savename+'_poisoned_training_data.npy'), training_data)
+            np.save(os.path.join(path, savename+'_poisoned_training_labels.npy'), labels)
+
 
         elif mode == 'kettle-export':
             with open(f'kette_{self.args.dataset}{self.args.model}.pkl', 'wb') as file:

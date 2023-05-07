@@ -1,6 +1,7 @@
 """Main class, holding information about models and training/testing routines."""
 
 import torch
+import torch.nn as nn
 import warnings
 
 from ..utils import cw_loss
@@ -94,6 +95,12 @@ class _Witch():
                 grad *= -1
         elif self.args.target_criterion in ['xent', 'cross-entropy']:
             self.target_grad, self.target_gnorm = victim.gradient(self.targets, self.intended_classes)
+        elif self.args.target_criterion in ['sharpness']:
+            criterion = nn.CrossEntropyLoss()
+            self.target_grad, self.target_gnorm = victim.sharp_grad(criterion, self.targets, self.intended_classes, self.args.sharpsigma)
+        elif self.args.target_criterion in ['worstsharp']:
+            criterion = nn.CrossEntropyLoss()
+            self.target_grad, self.target_gnorm = victim.worst_sharp_grad(criterion, self.targets, self.intended_classes, self.args.sharpsigma)
         else:
             raise ValueError('Invalid target criterion chosen ...')
         print(f'Target Grad Norm is {self.target_gnorm}')
