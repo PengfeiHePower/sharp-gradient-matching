@@ -109,7 +109,10 @@ class Kettle():
     """ STATUS METHODS """
 
     def print_status(self):
-        class_names = self.trainset.classes
+        if self.args.dataset == 'SVHN': #add svhn
+            class_names = [str(i) for i in range(10)]
+        else:
+            class_names = self.trainset.classes
         print(
             f'Poisoning setup generated for threat model {self.args.threatmodel} and '
             f'budget of {self.args.budget * 100}% - {len(self.poisonset)} images:')
@@ -192,6 +195,8 @@ class Kettle():
         # Train augmentations are handled separately as they possibly have to be backpropagated
         if self.augmentations is not None or self.args.paugment:
             if 'CIFAR' in self.args.dataset:
+                params = dict(source_size=32, target_size=32, shift=8, fliplr=True)
+            elif 'SVHN' in self.args.dataset: #add svhn
                 params = dict(source_size=32, target_size=32, shift=8, fliplr=True)
             elif 'MNIST' in self.args.dataset:
                 params = dict(source_size=28, sourcetarget_size_size=28, shift=4, fliplr=True)
@@ -389,7 +394,10 @@ class Kettle():
         random-subset draw poison images from all classes and draws targets from different classes to which it assigns
         different labels.
         """
-        num_classes = len(self.trainset.classes)
+        if self.args.dataset == 'SVHN':#add svhn
+            num_classes = 10
+        else:
+            num_classes = len(self.trainset.classes)
 
         target_class = np.random.randint(num_classes)
         list_intentions = list(range(num_classes))

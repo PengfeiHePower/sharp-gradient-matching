@@ -12,7 +12,7 @@ from .vgg import VGG
 
 def get_model(model_name, dataset_name, pretrained=False):
     """Retrieve an appropriate architecture."""
-    if 'CIFAR' in dataset_name or 'MNIST' in dataset_name:
+    if 'CIFAR' in dataset_name or 'MNIST' in dataset_name or 'SVHN' in dataset_name: #add svhn
         if pretrained:
             raise ValueError('Loading pretrained models is only supported for ImageNet.')
         in_channels = 1 if dataset_name == 'MNIST' else 3
@@ -190,7 +190,7 @@ def resnet_picker(arch, dataset):
     """Pick an appropriate resnet architecture for MNIST/CIFAR."""
     in_channels = 1 if dataset == 'MNIST' else 3
     num_classes = 10
-    if dataset in ['CIFAR10', 'MNIST']:
+    if dataset in ['CIFAR10', 'MNIST', 'SVHN']: #add svhn
         num_classes = 10
         initial_conv = [3, 1, 1]
     elif dataset == 'CIFAR100':
