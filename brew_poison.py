@@ -68,8 +68,8 @@ if __name__ == "__main__":
                                 args, model.defs, model.model_init_seed, extra_stats=timestamps)
 
     # Export
-    if args.save is not None:
-        data.export_poison(poison_delta, savename = args.savename, path=args.poison_path, mode=args.save)
+    # if args.save is not None:
+    #     data.export_poison(poison_delta, savename = args.savename, path=args.poison_path, mode=args.save)
 
     print(datetime.datetime.now().strftime("%A, %d. %B %Y %I:%M%p"))
     print('---------------------------------------------------')

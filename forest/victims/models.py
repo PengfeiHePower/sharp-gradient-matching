@@ -8,6 +8,7 @@ from collections import OrderedDict
 
 from .mobilenet import MobileNetV2
 from .vgg import VGG
+from .vit import ViT
 
 
 def get_model(model_name, dataset_name, pretrained=False):
@@ -40,6 +41,9 @@ def get_model(model_name, dataset_name, pretrained=False):
             model = VGG(model_name)
         elif model_name == 'MobileNetV2':
             model = MobileNetV2(num_classes=num_classes, train_dp=0, test_dp=0, droplayer=0, bdp=0)
+        elif model_name == 'vit':
+            model = ViT(image_size = int(32), patch_size = 4, num_classes = 10, dim = int(512),
+                        depth = 6, heads = 8, mlp_dim = 512, dropout = 0.1, emb_dropout = 0.1)
         else:
             raise ValueError(f'Architecture {model_name} not implemented for dataset {dataset_name}.')
 

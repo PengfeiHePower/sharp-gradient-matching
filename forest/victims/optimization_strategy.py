@@ -18,6 +18,8 @@ def training_strategy(model_name, args):
         defs = MemoryStrategy(model_name, args)
     elif args.optimization == 'standard':
         defs = StandardStrategy(model_name, args)
+    elif args.optimization == 'adam':
+        defs = AdamStrategy(model_name, args)
     elif args.optimization == 'standard2':
         defs = StandardStrategy2(model_name, args)
     else:
@@ -74,7 +76,7 @@ class ConservativeStrategy(Strategy):
         self.augmentations = True
         self.privacy = dict(clip=None, noise=None)
         self.adversarial_steps = 0
-        self.validate = 10
+        self.validate = 2
         self.mixing_method=dict(type='', strength=0.0, correction=False)
 
         super().__init__(model_name, args)
@@ -95,6 +97,26 @@ class StandardStrategy(Strategy):
         self.privacy = dict(clip=None, noise=None)
         self.adversarial_steps = 0
         self.validate = 10
+        self.mixing_method=dict(type='', strength=0.0, correction=False)
+
+        super().__init__(model_name, args)
+        
+@dataclass
+class AdamStrategy(Strategy):
+    """Default usual parameters, defines a config object."""
+
+    def __init__(self, model_name, args):
+        """Initialize training hyperparameters."""
+        self.lr = 0.1
+        self.epochs = 40
+        self.batch_size = 128
+        self.optimizer = 'AdamW'
+        self.scheduler = 'linear'
+        self.weight_decay = 5e-4
+        self.augmentations = True
+        self.privacy = dict(clip=None, noise=None)
+        self.adversarial_steps = 0
+        self.validate = 2
         self.mixing_method=dict(type='', strength=0.0, correction=False)
 
         super().__init__(model_name, args)
