@@ -36,6 +36,11 @@ if __name__ == "__main__":
 
     poison_delta = witch.brew(model, data)
     brew_time = time.time()
+    
+    # Export
+    if args.save is not None:
+        data.export_poison(poison_delta, savename = args.savename, path=args.poison_path, mode=args.save)
+
 
     if not args.pretrained and args.retrain_from_init:
         stats_rerun = model.retrain(data, poison_delta)
@@ -66,10 +71,6 @@ if __name__ == "__main__":
     results = (stats_clean, stats_rerun, stats_results)
     forest.utils.record_results(data, witch.stat_optimal_loss, results,
                                 args, model.defs, model.model_init_seed, extra_stats=timestamps)
-
-    # Export
-    # if args.save is not None:
-    #     data.export_poison(poison_delta, savename = args.savename, path=args.poison_path, mode=args.save)
 
     print(datetime.datetime.now().strftime("%A, %d. %B %Y %I:%M%p"))
     print('---------------------------------------------------')
